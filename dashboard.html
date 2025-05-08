@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor Gempa BMKG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 0;
+    }
+    #map { 
+      height: 60vh; 
+      width: 100%; 
+      border-radius: 0.75rem;
+      border: 1px solid #334155;
+      z-index: 1;
+    }
+    .legend {
+      padding: 0.75rem;
+      background: #1e293b;
+      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      border-radius: 0.75rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+    }
+    .legend i {
+      width: 1.25rem;
+      height: 1.25rem;
+      float: left;
+      margin-right: 0.5rem;
+      opacity: 0.9;
+      border-radius: 9999px;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .quake-marker {
+      filter: drop-shadow(0 0 8px currentColor);
+    }
+    .leaflet-container {
+      background: #0f172a !important;
+    }
+    .message-item {
+  animation: fadeIn 0.5s ease-out;
+  transition: all 0.3s ease;
+}
+
+.message-item:hover {
+  transform: translateX(2px);
+  border-left-color: #22d3ee;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animasi untuk notifikasi baru */
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(34, 211, 238, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+  }
+}
+
+.new-message {
+  animation: pulseGlow 1.5s infinite;
+}
+  </style>
+</head>
+<body>
+  <nav class="bg-gradient-to-r from-cyan-600 to-blue-600 nav-glow">
+    <div class="container mx-auto px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <h1 class="text-white text-2xl font-bold tracking-tight">MONITOR GEMPA</h1>
+        </div>
+        <div id="lastUpdate" class="text-white/90 text-sm font-mono"></div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container mx-auto px-4 py-6 space-y-6">
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+        <div class="glass-card p-6 rounded-xl shadow-2xl flex items-center space-x-4">
+            <div class="w-8 h-8 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+            <span class="text-white font-medium">Memproses data, harap tunggu...</span>
+        </div>
+    </div>
+    
+<div class="glass-card rounded-xl p-5 mb-6">
+  <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+    </svg>
+    NOTIFIKASI SERVER
+  </h2>
+  
+  <div id="serverMessage" class="relative">
+    <!-- Default state when no messages -->
+    <div class="flex flex-col items-center justify-center py-8 text-center" id="emptyMessage">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+      </svg>
+      <p class="text-gray-400 font-medium">Tidak ada pesan baru</p>
+      <p class="text-gray-500 text-sm mt-1">Server akan mengirim notifikasi di sini</p>
+    </div>
+    
+    <!-- Template for message (hidden by default) -->
+    <div id="messageTemplate" class="hidden">
+      <div class="message-item bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-l-4 border-cyan-500 rounded-r-lg p-4 mb-3 shadow-lg">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="font-bold text-cyan-400 text-sm">PEMBARUAN DATA</p>
+            <p class="text-white mt-1" data-content="text">Pesan dari server akan muncul di sini</p>
+          </div>
+          <span class="text-xs text-gray-500" data-content="time">Baru saja</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <div class="glass-card rounded-xl p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-white flex items-center">
+              PETA SEISMIK
+            </h2>
+            <button onclick="refreshData()" 
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-cyan-600 hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 transition-all duration-300 hover:scale-105">
+              PERBARUI DATA
+            </button>
+          </div>
+          <div id="map"></div>
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="glass-card rounded-xl p-5">
+          <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+            GEMPA TERKINI
+          </h2>
+          <div id="latestInfo"></div>
+        </div>
+
+        <div class="glass-card rounded-xl p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold text-white flex items-center">
+              DATA SEISMIK
+            </h2>
+            <div class="flex items-center space-x-2">
+              <button onclick="filterGempa('semua')" 
+                      class="px-3 py-1.5 bg-cyan-600 text-white rounded-lg text-xs font-medium hover:bg-cyan-700 transition-all">
+                SEMUA
+              </button>
+              <button onclick="filterGempa('kuat')" 
+                      class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-lg text-xs font-medium hover:bg-gray-600 transition-all">
+                ≥ 5.0
+              </button>
+              <button onclick="filterGempa('lemah')" 
+                      class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-lg text-xs font-medium hover:bg-gray-600 transition-all">
+                < 5.0
+              </button>
+            </div>
+          </div>
+          <div id="quakeList" class="overflow-y-auto max-h-[60vh] space-y-3 pr-2">
+            <!-- List items will be added here by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+    // Inisialisasi variabel global
+    let map;
+    let markers = [];
+    let gempaData = [];
+    let currentFilter = 'semua';
+    
+    const magnitudeColors = {
+      '0-3': '#10b981',
+      '3-5': '#f59e0b',
+      '5-7': '#f97316',
+      '7+': '#ef4444'
+    };
+
+    // Fungsi untuk menampilkan/menyembunyikan loading
+    function showLoading(show) {
+      document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
+    }
+
+    // Fungsi untuk inisialisasi peta
+    function initMap() {
+      // Pastikan elemen map ada
+      if (!document.getElementById('map')) {
+        console.error('Element with id "map" not found');
+        return;
+      }
+
+      // Inisialisasi peta dengan view Indonesia
+      map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false,
+        preferCanvas: true
+      }).setView([-2.5489, 118.0149], 5);
+      
+      // Tambahkan tile layer OpenStreetMap
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+        detectRetina: true
+      }).addTo(map);
+      
+      // Tambahkan kontrol zoom
+      new L.Control.Zoom({ position: 'topright' }).addTo(map);
+      
+      // Tambahkan legend dan muat data awal
+      addLegend();
+      refreshData();
+    }
+
+    // Fungsi untuk menambahkan legend
+    function addLegend() {
+      const legend = L.control({position: 'bottomright'});
+      legend.onAdd = function() {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<h4 class="font-bold mb-2 text-cyan-400">MAGNITUDO (SR)</h4>';
+        const ranges = {
+          '0-3': 'Ringan',
+          '3-5': 'Sedang',
+          '5-7': 'Kuat',
+          '7+': 'Ekstrem'
+        };
+        for (let range in magnitudeColors) {
+          div.innerHTML +=
+            `<div class="flex items-center mb-1">
+              <i style="background: ${magnitudeColors[range]}"></i>
+              <span class="text-sm">${range} (${ranges[range]})</span>
+            </div>`;
+        }
+        return div;
+      };
+      legend.addTo(map);
+    }
+
+    // Ganti fungsi refreshData() di HTML Anda dengan:
+    async function refreshData() {
+      showLoading(true);
+      
+      try {
+        // Ambil data terbaru dari server
+        const response = await fetch('/api/latest-data');
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          // Proses data magnitude (gempa)
+          if (result.data.magnitude) {
+            const quakeData = {
+              tanggal: new Date(result.data.magnitude.TIMESTAMP).toLocaleDateString('id-ID'),
+              jam: new Date(result.data.magnitude.TIMESTAMP).toLocaleTimeString('id-ID'),
+              magnitude: result.data.magnitude.SR.toString(),
+              wilayah: "Lokasi gempa terdeteksi",
+              kedalaman: "10 km", // Anda bisa sesuaikan
+              lintang: "2.45 LS", // Contoh, sesuaikan dengan data sebenarnya
+              bujur: "118.01 BT"  // Contoh, sesuaikan dengan data sebenarnya
+            };
+            
+            gempaData = [quakeData]; // Buat array dengan data terbaru
+            updateDisplay();
+          }
+          
+          // Proses data alerts (notifikasi)
+          if (result.data.alerts) {
+            addServerMessage(result.data.alerts.DATA, new Date(result.data.alerts.TIMESTAMP));
+          }
+          
+          // Proses data heartbeat (jika diperlukan)
+          if (result.data.heartbeat) {
+            console.log('Heartbeat rate:', result.data.heartbeat.HR);
+          }
+        } else {
+          handleError(result.error || 'Failed to load data');
+        }
+      } catch (error) {
+        handleError(error);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // Fungsi untuk menyaring gempa
+    function filterGempa(filter) {
+      currentFilter = filter;
+      updateDisplay();
+      
+      // Update tombol aktif
+      document.querySelectorAll('#quakeList + div button').forEach(btn => {
+        btn.classList.remove('bg-cyan-600', 'text-white');
+        btn.classList.add('bg-gray-700', 'text-gray-300');
+      });
+      
+      const activeBtn = document.querySelector(`button[onclick="filterGempa('${filter}')"]`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-cyan-600', 'text-white');
+        activeBtn.classList.remove('bg-gray-700', 'text-gray-300');
+      }
+    }
+
+    // Fungsi untuk memperbarui tampilan
+    function updateDisplay() {
+      // Hapus marker yang ada
+      markers.forEach(marker => marker.remove());
+      markers = [];
+
+      const quakeList = document.getElementById('quakeList');
+      const latestInfo = document.getElementById('latestInfo');
+      if (quakeList) quakeList.innerHTML = '';
+      if (latestInfo) latestInfo.innerHTML = '';
+
+      if (!gempaData || gempaData.length === 0) {
+        if (latestInfo) {
+          latestInfo.innerHTML = '<p class="text-gray-400">Data seismik tidak tersedia</p>';
+        }
+        return;
+      }
+
+      // Update waktu terakhir diperbarui
+      const now = new Date();
+      const hari = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const waktuSekarang = `${hari[now.getDay()]}, ${now.getDate()} ${bulan[now.getMonth()]} ${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} WIB`;
+      document.getElementById('lastUpdate').textContent = 'TERAKHIR DIPERBARUI: ' + waktuSekarang;
+
+      // Filter data berdasarkan kriteria
+      const filteredData = gempaData.filter(quake => {
+        const magnitude = parseFloat(quake.magnitude);
+        if (currentFilter === 'kuat') return magnitude >= 5;
+        if (currentFilter === 'lemah') return magnitude < 5;
+        return true;
+      });
+
+      // Proses setiap data gempa
+      filteredData.forEach((quake, index) => {
+        try {
+          const magnitude = parseFloat(quake.magnitude) || 0;
+          let lat = parseFloat(quake.lintang.replace(' LS', '').replace(' LU', ''));
+          if (quake.lintang.includes('LS')) lat = -lat;
+          let lng = parseFloat(quake.bujur.replace(' BT', '').replace(' BB', ''));
+          if (quake.bujur.includes('BB')) lng = -lng;
+
+          if (isNaN(lat) || isNaN(lng)) return;
+
+          const color = magnitude <= 3 ? magnitudeColors['0-3'] :
+                        magnitude <= 5 ? magnitudeColors['3-5'] :
+                        magnitude <= 7 ? magnitudeColors['5-7'] : magnitudeColors['7+'];
+
+          // Buat marker untuk peta
+          const marker = L.circleMarker([lat, lng], {
+            radius: Math.min(Math.max(magnitude * 2, 5), 20),
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.8,
+            className: 'quake-marker'
+          }).addTo(map);
+
+          // Tambahkan popup info
+          marker.bindPopup(`
+            <div class="p-3 bg-gray-800 text-gray-100 rounded-lg">
+              <div class="flex items-center space-x-2 mb-3">
+                <span class="inline-block w-4 h-4 rounded-full" style="background-color: ${color}"></span>
+                <span class="font-bold text-xl">${magnitude} SR</span>
+              </div>
+              <div class="space-y-2 text-sm">
+                <p>Lokasi: ${quake.wilayah}</p>
+                <p>Kedalaman: ${quake.kedalaman}</p>
+                <p>Waktu: ${quake.tanggal} ${quake.jam}</p>
+              </div>
+            </div>
+          `);
+
+          markers.push(marker);
+
+          // Buat item untuk daftar gempa
+          const listItem = document.createElement('div');
+          listItem.className = 'glass-card rounded-lg p-4 cursor-pointer hover:bg-slate-700/50 transition-colors';
+          listItem.innerHTML = `
+            <div class="flex items-start space-x-4">
+              <div class="flex-shrink-0">
+                <div class="w-12 h-12 flex items-center justify-center rounded-lg" style="background-color: ${color}">
+                  <span class="text-white font-bold text-lg">${magnitude}</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm font-bold text-white">${quake.wilayah}</p>
+                <p class="text-xs text-gray-400">${quake.tanggal} ${quake.jam}</p>
+                <p class="text-xs text-gray-400 mt-1">Kedalaman: ${quake.kedalaman}</p>
+              </div>
+            </div>
+          `;
+
+          // Tambahkan event click untuk zoom ke lokasi
+          listItem.addEventListener('click', () => {
+            map.setView([lat, lng], 8);
+            marker.openPopup();
+          });
+
+          if (quakeList) quakeList.appendChild(listItem);
+
+          // Tampilkan gempa terbaru di panel info
+          if (index === 0 && latestInfo) {
+            latestInfo.innerHTML = `
+              <div class="p-4 bg-gray-800 rounded-lg">
+                <div class="flex items-center space-x-3 mb-2">
+                  <div class="w-10 h-10 flex items-center justify-center rounded-lg" style="background-color: ${color}">
+                    <span class="text-white font-bold">${magnitude}</span>
+                  </div>
+                  <div>
+                    <p class="text-lg font-bold">${quake.wilayah}</p>
+                    <p class="text-sm text-gray-400">${quake.tanggal} ${quake.jam}</p>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                  <div class="bg-gray-700/50 p-2 rounded">
+                    <p class="text-gray-400">Kedalaman</p>
+                    <p class="font-medium">${quake.kedalaman}</p>
+                  </div>
+                  <div class="bg-gray-700/50 p-2 rounded">
+                    <p class="text-gray-400">Koordinat</p>
+                    <p class="font-medium">${lat.toFixed(2)}° ${lng.toFixed(2)}°</p>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        } catch (error) {
+          console.error('Error processing earthquake data:', error, quake);
+        }
+      });
+    }
+
+    // Fungsi untuk menangani error
+    function handleError(error) {
+      console.error('Error:', error);
+      const errorElement = document.getElementById('latestInfo');
+      if (errorElement) {
+        errorElement.innerHTML = `
+          <div class="bg-red-900/30 border-l-4 border-red-500 p-4 rounded-lg">
+            <p class="text-sm font-medium text-red-300">Gagal memuat data seismik</p>
+            <p class="text-xs text-red-400 mt-1">${error.message || error}</p>
+          </div>
+        `;
+      }
+    }
+
+    // Fungsi untuk data sampel (jika GAS tidak tersedia)
+    function getSampleData() {
+      return [
+        {
+          tanggal: '01 Jan 2023',
+          jam: '12:00:00 WIB',
+          lintang: '2.45 LS',
+          bujur: '118.01 BT',
+          magnitude: '5.2',
+          kedalaman: '10 km',
+          wilayah: 'Laut Jawa, 80 km Barat Daya Sumenep'
+        },
+        {
+          tanggal: '01 Jan 2023',
+          jam: '10:30:00 WIB',
+          lintang: '1.25 LS',
+          bujur: '120.45 BT',
+          magnitude: '3.8',
+          kedalaman: '15 km',
+          wilayah: 'Sulawesi Tengah, 25 km Timur Luwuk'
+        },
+        {
+          tanggal: '01 Jan 2023',
+          jam: '08:15:00 WIB',
+          lintang: '4.75 LS',
+          bujur: '122.30 BT',
+          magnitude: '6.5',
+          kedalaman: '20 km',
+          wilayah: 'Laut Banda, 150 km Tenggara Kendari'
+        }
+      ];
+    }
+
+    // Fungsi untuk menambahkan notifikasi server
+    function addServerMessage(message, timestamp) {
+      const emptyMessage = document.getElementById('emptyMessage');
+      if (emptyMessage) emptyMessage.style.display = 'none';
+      
+      const template = document.getElementById('messageTemplate');
+      if (!template) return;
+      
+      const clone = template.cloneNode(true);
+      clone.id = '';
+      clone.classList.remove('hidden');
+      clone.classList.add('new-message');
+      
+      // Isi dengan data aktual
+      clone.querySelector('[data-content="text"]').textContent = message;
+      clone.querySelector('[data-content="time"]').textContent = formatTimeAgo(timestamp);
+      
+      const container = document.getElementById('serverMessage');
+      if (container) {
+        container.insertBefore(clone, container.firstChild);
+        
+        // Hentikan animasi setelah 3 detik
+        setTimeout(() => {
+          clone.classList.remove('new-message');
+        }, 3000);
+      }
+    }
+
+    // Fungsi helper untuk format waktu
+    function formatTimeAgo(date) {
+      const now = new Date();
+      const diff = now - new Date(date);
+      
+      const minute = 60 * 1000;
+      const hour = 60 * minute;
+      const day = 24 * hour;
+      
+      if (diff < minute) return 'Baru saja';
+      if (diff < hour) return `${Math.floor(diff / minute)} menit lalu`;
+      if (diff < day) return `${Math.floor(diff / hour)} jam lalu`;
+      return `${Math.floor(diff / day)} hari lalu`;
+    }
+
+    // Inisialisasi saat DOM siap
+    document.addEventListener('DOMContentLoaded', function() {
+      initMap();
+      
+      const socket = io();
+      
+      // Handle update magnitude (gempa)
+      socket.on('new-magnitude', (data) => {
+        const quakeData = {
+          tanggal: new Date(data.timestamp).toLocaleDateString('id-ID'),
+          jam: new Date(data.timestamp).toLocaleTimeString('id-ID'),
+          magnitude: data.magnitude.toString(),
+          wilayah: "Lokasi gempa terdeteksi",
+          kedalaman: "10 km",
+          lintang: "2.45 LS",
+          bujur: "118.01 BT"
+        };
+        
+        gempaData = [quakeData];
+        updateDisplay();
+        
+        // Tampilkan notifikasi
+        addServerMessage(`Gempa baru terdeteksi: ${data.magnitude} SR`, new Date(data.timestamp));
+      });
+      
+      // Handle update alerts
+      socket.on('new-alert', (data) => {
+        addServerMessage(data.data, new Date(data.timestamp));
+      });
+      
+      // Auto-refresh
+      setInterval(refreshData, 300000);
+    });
+</script>
+</body>
+</html>
+``` 
