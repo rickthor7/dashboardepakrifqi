@@ -96,6 +96,30 @@
 .new-message {
   animation: pulseGlow 1.5s infinite;
 }
+
+/* Tambahkan di bagian style */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #334155;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background-color: #1e293b;
+  z-index: 10;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
   </style>
 </head>
 <body>
@@ -165,6 +189,37 @@
           </div>
           <div id="map"></div>
         </div>
+      <!-- Tambahkan ini tepat setelah div yang mengandung peta (sebelum penutup lg:col-span-2) -->
+<div class="glass-card rounded-xl p-5 mt-6">
+  <h2 class="text-xl font-bold text-white mb-4 flex items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+    DATA PENGGUNA JAM TANGAN
+  </h2>
+  
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-700">
+      <thead>
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">No</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">User</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">Status SOS</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">Detak Jantung</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">SpO2</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">Tekanan Darah</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-cyan-400 uppercase tracking-wider">Lokasi Terakhir</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-700" id="userTableBody">
+        <!-- Data akan diisi oleh JavaScript -->
+        <tr>
+          <td colspan="7" class="px-4 py-4 text-center text-sm text-gray-500" id="emptyUserData">Memuat data pengguna...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
       </div>
 
       <div class="space-y-6">
@@ -571,21 +626,27 @@
       
       // Handle update magnitude (gempa)
       socket.on('new-magnitude', (data) => {
+        // Parsing pesan dengan format "Magnitude: 3, LAT: -17281, LONG: -1873728"
+        const messageParts = data.message.split(',').map(part => part.trim());
+        const magnitude = messageParts[0].split(':')[1].trim();
+        const lat = parseFloat(messageParts[1].split(':')[1].trim());
+        const long = parseFloat(messageParts[2].split(':')[1].trim());
+        
         const quakeData = {
           tanggal: new Date(data.timestamp).toLocaleDateString('id-ID'),
           jam: new Date(data.timestamp).toLocaleTimeString('id-ID'),
-          magnitude: data.magnitude.toString(),
+          magnitude: magnitude,
           wilayah: "Lokasi gempa terdeteksi",
           kedalaman: "10 km",
-          lintang: "2.45 LS",
-          bujur: "118.01 BT"
+          lintang: `${lat.toFixed(2)} LS`,
+          bujur: `${long.toFixed(2)} BT`
         };
         
         gempaData = [quakeData];
         updateDisplay();
         
         // Tampilkan notifikasi
-        addServerMessage(`Gempa baru terdeteksi: ${data.magnitude} SR`, new Date(data.timestamp));
+        addServerMessage(`Gempa baru terdeteksi: ${magnitude} SR`, new Date(data.timestamp));
       });
       
       // Handle update alerts
@@ -596,7 +657,87 @@
       // Auto-refresh
       setInterval(refreshData, 300000);
     });
+
+    // Tambahkan fungsi ini di bagian script
+function updateUserData(users) {
+  const tableBody = document.getElementById('userTableBody');
+  const emptyRow = document.getElementById('emptyUserData');
+  
+  if (!users || users.length === 0) {
+    if (emptyRow) emptyRow.textContent = 'Tidak ada data pengguna';
+    return;
+  }
+  
+  if (emptyRow) emptyRow.remove();
+  
+  tableBody.innerHTML = '';
+  
+  users.forEach((user, index) => {
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-slate-800/50 transition-colors';
+    
+    // Format status SOS
+    const sosStatus = user.sos ? 
+      `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900 text-red-100">AKTIF</span>` : 
+      `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300">NORMAL</span>`;
+    
+    // Format detak jantung
+    const heartRateClass = user.heartRate > 100 ? 'text-red-400' : 
+                          user.heartRate < 60 ? 'text-yellow-400' : 'text-green-400';
+    
+    row.innerHTML = `
+      <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${index + 1}</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-white">${user.name}</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${sosStatus}</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm ${heartRateClass}">${user.heartRate} bpm</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${user.spo2}%</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${user.bloodPressure}</td>
+      <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${user.lastLocation}</td>
+    `;
+    
+    tableBody.appendChild(row);
+  });
+}
+
+// Tambahkan handler untuk data pengguna di event DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+  // ... kode yang sudah ada ...
+  
+  // Handle update user data
+  socket.on('user-data', (data) => {
+    updateUserData(data);
+  });
+  
+  // Data contoh (bisa dihapus jika data datang dari server)
+  const sampleUsers = [
+    {
+      name: 'Rescue Watch 1',
+      sos: false,
+      heartRate: 72,
+      spo2: 98,
+      bloodPressure: '120/80',
+      lastLocation: '-6.1754, 106.8272'
+    },
+    {
+      name: 'Rescue Watch 2',
+      sos: true,
+      heartRate: 112,
+      spo2: 95,
+      bloodPressure: '140/90',
+      lastLocation: '-6.1800, 106.8300'
+    },
+    {
+      name: 'Rescue Watch 3',
+      sos: false,
+      heartRate: 65,
+      spo2: 97,
+      bloodPressure: '110/70',
+      lastLocation: '-6.1700, 106.8250'
+    }
+  ];
+  
+  updateUserData(sampleUsers);
+});
 </script>
 </body>
 </html>
-``` 
