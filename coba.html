@@ -142,6 +142,7 @@ tbody tr:last-child td {
     .message-item {
   animation: fadeIn 0.5s ease-out;
   transition: all 0.3s ease;
+  margin-bottom: 0.75rem;
 }
 
 .message-item:hover {
@@ -206,24 +207,9 @@ tbody tr:last-child td {
   </h2>
   
   <div id="serverMessage" class="relative h-48 overflow-y-auto pr-2">
-    <!-- Default state when no messages -->
-    <div id="serverMessage" class="relative h-48 overflow-y-auto pr-2">
-  <!-- Notifikasi akan muncul di sini -->
-</div>
-    
-    <!-- Template for message (hidden by default) -->
-    <div id="messageTemplate" class="hidden">
-      <div class="message-item bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-l-4 border-cyan-500 rounded-r-lg p-4 mb-3 shadow-lg">
-        <div class="flex justify-between items-start">
-          <div>
-            <p class="font-bold text-cyan-400 text-sm">PEMBARUAN DATA</p>
-            <p class="text-white mt-1" data-content="text">Pesan dari server akan muncul di sini</p>
-          </div>
-          <span class="text-xs text-gray-500" data-content="time">Baru saja</span>
-        </div>
-      </div>
-    </div>
+    <!-- Notifikasi akan muncul di sini secara dinamis -->
   </div>
+</div>
 </div>
     
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
