@@ -139,6 +139,42 @@ tbody tr:last-child td {
   background-color: #334155;
   border-radius: 3px;
 }
+    .message-item {
+  animation: fadeIn 0.5s ease-out;
+  transition: all 0.3s ease;
+}
+
+.message-item:hover {
+  transform: translateX(2px);
+  border-left-color: #22d3ee;
+}
+
+.new-message {
+  animation: pulseGlow 1.5s infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(34, 211, 238, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0);
+  }
+}
   </style>
 </head>
 <body>
@@ -171,13 +207,9 @@ tbody tr:last-child td {
   
   <div id="serverMessage" class="relative h-48 overflow-y-auto pr-2">
     <!-- Default state when no messages -->
-    <div class="flex flex-col items-center justify-center py-8 text-center" id="emptyMessage">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-      </svg>
-      <p class="text-gray-400 font-medium">Tidak ada pesan baru</p>
-      <p class="text-gray-500 text-sm mt-1">Server akan mengirim notifikasi di sini</p>
-    </div>
+    <div id="serverMessage" class="relative h-48 overflow-y-auto pr-2">
+  <!-- Notifikasi akan muncul di sini -->
+</div>
     
     <!-- Template for message (hidden by default) -->
     <div id="messageTemplate" class="hidden">
@@ -633,42 +665,37 @@ tbody tr:last-child td {
 
     // Fungsi untuk menambahkan notifikasi server
     function addServerMessage(message, timestamp) {
-  const emptyMessage = document.getElementById('emptyMessage');
-  if (emptyMessage && emptyMessage.parentNode) {
-    emptyMessage.style.display = 'none';
+  const container = document.getElementById('serverMessage');
+  if (!container) return;
+
+  // Buat elemen notifikasi baru
+  const messageElement = document.createElement('div');
+  messageElement.className = 'message-item bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-l-4 border-cyan-500 rounded-r-lg p-4 mb-3 shadow-lg new-message';
+  
+  messageElement.innerHTML = `
+    <div class="flex justify-between items-start">
+      <div>
+        <p class="font-bold text-cyan-400 text-sm">PEMBARUAN DATA</p>
+        <p class="text-white mt-1">${message}</p>
+      </div>
+      <span class="text-xs text-gray-500">${formatTimeAgo(timestamp)}</span>
+    </div>
+  `;
+
+  // Tambahkan notifikasi ke container
+  container.insertBefore(messageElement, container.firstChild);
+
+  // Batasi maksimal 10 notifikasi
+  const messages = container.querySelectorAll('.message-item');
+  if (messages.length > 10) {
+    container.removeChild(messages[messages.length - 1]);
   }
 
-  const template = document.getElementById('messageTemplate');
-  if (!template) return;
-
-  const clone = template.cloneNode(true);
-  clone.id = '';
-  clone.classList.remove('hidden');
-  clone.classList.add('new-message');
-
-  // Isi dengan data aktual
-  clone.querySelector('[data-content="text"]').textContent = message;
-  clone.querySelector('[data-content="time"]').textContent = formatTimeAgo(timestamp);
-
-  const container = document.getElementById('serverMessage');
-  if (container) {
-    // Batasi maksimal 5 notifikasi
-    const messages = container.querySelectorAll('.message-item');
-    if (messages.length >= 5) {
-      if (messages[messages.length - 1].parentNode === container) {
-        container.removeChild(messages[messages.length - 1]);
-      }
-    }
-
-    container.insertBefore(clone, container.firstChild);
-
-    // Auto-scroll ke atas
-    container.scrollTop = 0;
-
-    // Hentikan animasi setelah 3 detik
-    setTimeout(() => {
-      clone.classList.remove('new-message');
-    }, 3000);
+  // Hentikan animasi setelah 3 detik
+  setTimeout(() => {
+    messageElement.classList.remove('new-message');
+  }, 3000);
+}
 
     console.log('Messages in container:', container.querySelectorAll('.message-item'));
   }
@@ -941,6 +968,9 @@ socket.on('latest-magnitude', (data) => {
       </div>
     `;
   }
+});
+  socket.on('mqtt-message', (data) => {
+  addServerMessage(data.message, new Date(data.timestamp));
 });
 </script>
 </body>
